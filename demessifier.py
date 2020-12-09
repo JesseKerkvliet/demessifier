@@ -1,3 +1,4 @@
+
 #!/usr/bin/python
 
 
@@ -102,6 +103,34 @@ def arm_demessifier(name, dir):
 @click.option("-n","--name",required=True)
 def clean(name,cleaning):
     print("cleaning goes here")
+    recover = open('demessifier_armed_{}.txt'.format(name),'r').read().splitlines()
+    recov_list = [[x.split(':') for x in recover]]
+    recov_dict = {}
+    for entry in recov_list:
+        recov_dict.update(dict(entry))
 
+    print(recov_dict)
+    try:
+        name = recov_dict['rune_name']
+        dir = recov_dict['dir']
+        snapshot = recov_dict['snapshot'].split(',')
+    except KeyError:
+        print('somethings wrong')
+    print(snapshot)
+
+    current_files = os.listdir('.')
+    newfiles = list(set(current_files) - set(snapshot))
+    print(newfiles)
+    if cleaning == "slurm":
+        indices = [i for i, x in enumerate(newfiles) if x.find("slurm-") != -1 or x.find("core.")!= -1]
+        to_clean = [newfiles[i] for i in indices]
+    os.makedirs("{}/{}/slurm".format(dir,name))
+    os.makedirs("{}/{}/core".format(dir,name))
+    for file in to_clean:
+        print(file)
+        os.rename("./{}".format(file), "{}/{}/slurm/{}".format(dir,name,file))
+ 
+                 
+    print(to_clean)
 if __name__ == "__main__":
     cligroup()
