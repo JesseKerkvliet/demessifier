@@ -17,6 +17,21 @@ import logging
 from datetime import date
 import os
 import sys
+import re
+
+
+def welcome(command):
+    print("Hoi.")
+def findFiletypes(filelist):
+    switch = {
+    "gz":lambda x: (x.split(".")[-1] if len(x.split(".")) <= 2 else ".".join(x.split(".")[-2:])),
+    "out" : lambda x: ("slurm" if re.match("slurm-.*\.out",x) else x.split(".")[-1])
+    }
+    extensions = []
+    for file in filelist:
+        ext = file.split(".")[-1]
+        extensions.append(switch.get(ext,lambda x: x.split(".")[-1])(file))
+    return(list(set(extensions)))
 
 def getRunName(outdir):
     today=date.today()
@@ -45,7 +60,8 @@ def writeToFile(dir,name, present_files):
 def goodbye(status):
     # Returns exit message
     ## TODO: add different actions for different exit statuses
-    print("Thanks for using Demessifier!")
+    if status == 0:
+	    print("Thanks for using Demessifier!")
     sys.exit()
 
 # Add date and time to log messages
@@ -81,13 +97,12 @@ def cligroup():
 )
 
 def arm_demessifier(name, dir):
+    welcome("arm")
     # make output directory
-    print("{}/{}/".format(dir,name))
     try:
         os.makedirs("{}/{}".format(dir,name))
     except FileExistsError:
         name = getRunName(dir)
-        print(name)
        	print("Run name already exists in this directory. I'll use a generic name!\nYour files will be in {}/{}".format(dir,name))
         os.makedirs("{}/{}".format(dir,name))            
 
@@ -96,35 +111,31 @@ def arm_demessifier(name, dir):
     # but at some point it might be useful to know which files have been generated since arming
     # e.g. when you want to add other log files that are generated, core files, intermediate files, etc.
     # I also plan to implement a "clean all" option, for which this is the first step.
-    print("do") 
     present_files = os.listdir(".")
-    print(present_files)
     writeToFile(dir,name,present_files)
 
 @cligroup.command("clean")
 @click.option("-c","--cleaning",type=click.Choice(["slurm","full"],case_sensitive=False),default="slurm")
 @click.option("-n","--name",required=True)
 def clean(name,cleaning):
-    print("cleaning goes here")
+    welcome("clean")
     recover = open('demessifier_armed_{}.txt'.format(name),'r').read().splitlines()
     recov_list = [[x.split(':') for x in recover]]
     recov_dict = {}
     for entry in recov_list:
         recov_dict.update(dict(entry))
     name,dir,snapshot= "","",""
-    print(recov_dict)
     try:
         name = recov_dict['run_name']
         dir = recov_dict['dir']
         snapshot = recov_dict['snapshot'].split(',')
     except KeyError:
-        print('somethings wrong')
+        print('Something went wrong. Please make sure the demessifier_armed file was not changed after arming.')
         goodbye(1)
-    print(snapshot)
 
     current_files = os.listdir('.')
     newfiles = list(set(current_files) - set(snapshot))
-    print(newfiles)
+    filetypes = findFiletypes(newfiles)
     if cleaning == "slurm":
         indices = [i for i, x in enumerate(newfiles) if x.find("slurm-") != -1 or x.find("core.")!= -1]
         to_clean = [newfiles[i] for i in indices]
@@ -138,11 +149,14 @@ def clean(name,cleaning):
             print("It looks like something went wrong. Cleaning has failed. Please try arming a new experiment")
         goodbye(1)
     for file in to_clean:
-        print(file)
         os.rename("./{}".format(file), "{}/{}/slurm/{}".format(dir,name,file))
     
-    #os.makefile("{}/{}/done.txt".format(dir,name))
     open('{}/{}/done.txt'.format(dir,name),'w').close()             
     goodbye(0)
+
+@cligroup.command("test")
+def test():
+    testlist = ["a.txt","b.fasta","slurm-123489.out","123489.core","b.txt","c.fastq.gz","d.tar.gz","e.gz","blast.out"]
+    print(findFiletypes(testlist))
 if __name__ == "__main__":
     cligroup()
