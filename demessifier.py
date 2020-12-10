@@ -16,7 +16,7 @@ import subprocess
 import logging
 from datetime import date
 import os
-
+import sys
 
 def getRunName(outdir):
     today=date.today()
@@ -40,11 +40,13 @@ def writeToFile(dir,name, present_files):
     snapshot = ",".join(present_files)
     message = "run_name:{}\ndir:{}\nsnapshot:{}".format(name,dir,snapshot)
     with open(filename,'w') as outfile:
-        outfile.write()    
+        outfile.write(message)    
 
-def goodbye():
+def goodbye(status):
     # Returns exit message
+    ## TODO: add different actions for different exit statuses
     print("Thanks for using Demessifier!")
+    sys.exit()
 
 # Add date and time to log messages
 logging.basicConfig(
@@ -94,8 +96,9 @@ def arm_demessifier(name, dir):
     # but at some point it might be useful to know which files have been generated since arming
     # e.g. when you want to add other log files that are generated, core files, intermediate files, etc.
     # I also plan to implement a "clean all" option, for which this is the first step.
-     
-    present_file = os.listdir(".")
+    print("do") 
+    present_files = os.listdir(".")
+    print(present_files)
     writeToFile(dir,name,present_files)
 
 @cligroup.command("clean")
@@ -108,14 +111,15 @@ def clean(name,cleaning):
     recov_dict = {}
     for entry in recov_list:
         recov_dict.update(dict(entry))
-
+    name,dir,snapshot= "","",""
     print(recov_dict)
     try:
-        name = recov_dict['rune_name']
+        name = recov_dict['run_name']
         dir = recov_dict['dir']
         snapshot = recov_dict['snapshot'].split(',')
     except KeyError:
         print('somethings wrong')
+        goodbye(1)
     print(snapshot)
 
     current_files = os.listdir('.')
@@ -124,13 +128,21 @@ def clean(name,cleaning):
     if cleaning == "slurm":
         indices = [i for i, x in enumerate(newfiles) if x.find("slurm-") != -1 or x.find("core.")!= -1]
         to_clean = [newfiles[i] for i in indices]
-    os.makedirs("{}/{}/slurm".format(dir,name))
-    os.makedirs("{}/{}/core".format(dir,name))
+    try:
+        os.makedirs("{}/{}/slurm".format(dir,name))
+        os.makedirs("{}/{}/core".format(dir,name))
+    except FileExistsError:
+        if os.path.exists("{}/{}/done.txt".format(dir,name)):
+            print("It looks like this mess is cleaned already! Please check your given name or try arming a new experiment")
+        else:
+            print("It looks like something went wrong. Cleaning has failed. Please try arming a new experiment")
+        goodbye(1)
     for file in to_clean:
         print(file)
         os.rename("./{}".format(file), "{}/{}/slurm/{}".format(dir,name,file))
- 
-                 
-    print(to_clean)
+    
+    #os.makefile("{}/{}/done.txt".format(dir,name))
+    open('{}/{}/done.txt'.format(dir,name),'w').close()             
+    goodbye(0)
 if __name__ == "__main__":
     cligroup()
