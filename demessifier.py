@@ -25,11 +25,16 @@ def welcome(command):
 def findFiletypes(filelist):
     switch = {
     "gz":lambda x: (x.split(".")[-1] if len(x.split(".")) <= 2 else ".".join(x.split(".")[-2:])),
-    "out" : lambda x: ("slurm" if re.match("slurm-.*\.out",x) else x.split(".")[-1])
+    "out" : lambda x: ("slurm" if re.search("slurm-.*\.out",x) else x.split(".")[-1]),
+    "core": lambda x: (x.split(".")[0] if re.search("core.[0-9]*$",x) else x.split(".")[-1])
     }
     extensions = []
     for file in filelist:
-        ext = file.split(".")[-1]
+        regex = "core.[0-9]*$"
+        if re.search(regex,file):
+            ext = "core"
+        else:
+            ext = file.split(".")[-1]
         extensions.append(switch.get(ext,lambda x: x.split(".")[-1])(file))
     return(list(set(extensions)))
 
@@ -135,28 +140,44 @@ def clean(name,cleaning):
 
     current_files = os.listdir('.')
     newfiles = list(set(current_files) - set(snapshot))
-    filetypes = findFiletypes(newfiles)
+
     if cleaning == "slurm":
-        indices = [i for i, x in enumerate(newfiles) if x.find("slurm-") != -1 or x.find("core.")!= -1]
-        to_clean = [newfiles[i] for i in indices]
-    try:
-        os.makedirs("{}/{}/slurm".format(dir,name))
-        os.makedirs("{}/{}/core".format(dir,name))
-    except FileExistsError:
-        if os.path.exists("{}/{}/done.txt".format(dir,name)):
-            print("It looks like this mess is cleaned already! Please check your given name or try arming a new experiment")
-        else:
-            print("It looks like something went wrong. Cleaning has failed. Please try arming a new experiment")
-        goodbye(1)
-    for file in to_clean:
-        os.rename("./{}".format(file), "{}/{}/slurm/{}".format(dir,name,file))
+        filetypes = ["slurm","core"]
+
+    else:
+        filetypes = findFiletypes(newfiles)
+
+    for type in filetypes:
+        typedict = {
+        "slurm": "slurm-.*out$",
+        "core": "core.[0-9]*$",
+        "default": ".{}$"
+        }
+        regex = typedict.get(type, typedict.get("default")).format(type)
+        
+        indices = [i for i,x in enumerate(newfiles) if re.search(regex,x)]
+        print(type, regex, indices)
+        try:
+            os.makedirs("{}/{}/{}".format(dir,name,type))
+        except FileExistsError:
+            if os.path.exists("{}/{}/done.txt".format(dir,name)):
+                print("It looks like this mess is cleaned already! Please check your given name or try arming a new experiment")
+            else:
+                print("It looks like something went wrong. Cleaning has failed. Please try arming a new experiment")
+            goodbye(1)
+
+        files = [newfiles[i] for i in indices]
+        for file in files:
+            os.rename("./{}".format(file), "{}/{}/{}/{}".format(dir,name,type,file))
     
     open('{}/{}/done.txt'.format(dir,name),'w').close()             
     goodbye(0)
 
 @cligroup.command("test")
 def test():
-    testlist = ["a.txt","b.fasta","slurm-123489.out","123489.core","b.txt","c.fastq.gz","d.tar.gz","e.gz","blast.out"]
+    testlist = ["a.txt","b.fasta","slurm-123489.out","123489.core","b.txt","c.fastq.gz","d.tar.gz","e.gz","blast.out","core.19827"]
     print(findFiletypes(testlist))
+    a = "core.9843"
+    print(re.search("core.[0-9]*$",a))
 if __name__ == "__main__":
     cligroup()
